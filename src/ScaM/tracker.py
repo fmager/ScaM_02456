@@ -52,5 +52,5 @@ class model_tracker:
         
         out = {}
         for metric_name, metric_instance in self.metrics.items():
-            out[metric_name] = metric_instance.compute(self.activations, label_dict)
+            out[metric_name] = metric_instance(self.activations, label_dict)
         return out

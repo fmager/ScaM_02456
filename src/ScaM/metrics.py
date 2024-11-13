@@ -1,47 +1,41 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from abc import ABC, abstractmethod
-from . import distances
 
 
-class Metric(ABC):
-
-    @abstractmethod
-    def compute(self, Z_layer, **kwargs):
-        pass
+class Metric(nn.Module):
 
     @staticmethod
-    def to_one_hot(x: np.ndarray) -> np.ndarray:
+    def to_one_hot(y: np.ndarray, dtype, device) -> torch.Tensor:
         """
         Convert a 1D numpy array to one-hot encoding.
         """
-        c = np.unique(x)
-        I = torch.eye(len(c), dtype=torch.int32)
-        M = torch.zeros((len(x), len(c)), dtype=torch.int32)
+        # check if y is a numpy array
+        if not isinstance(y, np.ndarray):
+            raise ValueError('y must be a numpy array')
+        c = np.unique(y)
+        I = torch.eye(len(c), dtype=dtype, device=device)
+        y_onehot = torch.zeros((len(y), len(c)), dtype=dtype, device=device)
         for i, j in enumerate(c):
-            M[x == j] = I[i]
-        return M
+            y_onehot[y == j] = I[i]
+        return y_onehot
     
     @staticmethod
-    def CL_SNR(D, mask):
+    def within_between(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
-        Compute the Signal-to-Noise Ratio across classes.
-        D: 
+        Compute the within and between class variance.
+        x: NxD embedding matrix
+        y: NxC one-hot encoded matrix
         """
-        within_dist = torch.masked_select(D, mask).mean()
-        between_dist = torch.masked_select(D, ~mask).mean()
-        return between_dist / (within_dist + between_dist)
-    
-    @staticmethod
-    def label2mask(x: np.ndarray) -> np.ndarray:
-        """
-        Convert a one hot encoded array to a mask.
-        x: NxC array
-        mask: Nx(N-1)/2 x 1 boolean array of within class instances
-        """
-        N, C = x.shape
-        r, c = torch.triu_indices(N, N, offset=1)
-        mask = (C@C.T)[r, c].bool()
-        return mask
 
-# HERE GOES YOUR CODE
+        x_c = torch.einsum('nd,nc->cd', x, y) # CxD
+        between = torch.norm(x_c - x_c.mean(dim=0, keepdim=True), p=2).mean()
+        
+        x_c = torch.einsum('cd,nc->nd', x_c, y) # NxD
+        within = torch.norm(x - x_c, p=2).mean()
+
+        return (within, between)
+    
+    def forward(self, Z: torch.Tensor, y: dict):
+        # ...
